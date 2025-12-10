@@ -1,0 +1,21 @@
+{
+    "extends": "@react-native/typescript-config",
+    "include": [
+        "**/*.ts",
+        "**/*.tsx"
+, "config/firebase.js"    ],
+    "exclude": [
+        "**/node_modules",
+        "**/Pods"
+    ],
+    "compilerOptions": {
+        "baseUrl": "./",
+        "paths": {
+            "@src/*": [
+                "src/*/index",
+                "src/*"
+            ]
+        },
+        "types": ["node"]
+    }
+}
