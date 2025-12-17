@@ -1,7 +1,7 @@
 import { StackActions, useNavigation } from "@react-navigation/native";
 import { UserContext } from "@src/context/UserContext";
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { Animated, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from "react-native";
+import { Alert, Animated, Dimensions, Easing, LayoutAnimation, LayoutAnimationConfig, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, useColorScheme, View } from "react-native";
 import { styleValues } from "../styles/StylesCommons";
 import Header from "@src/components/Header";
 import DatePicker from 'react-native-date-picker'
@@ -9,11 +9,14 @@ import { TransactionOptionItems } from "@src/model/enums/Transaction";
 import { addDays, Transaction } from "@src/model/Transaction";
 import Loading from "@src/components/Loading";
 import { initCapSentence, toMoney } from "@src/model/utils/str";
+import { Image } from 'react-native';
+
+
 
 
 export default function TransactionsScreen() {
 
-    const { user, token, setIsLoading } = useContext(UserContext);
+    const { user, token, setIsLoading, updateStatement } = useContext(UserContext);
 
     const [type, setType] = useState('');
     const [startDate, setStartDate] = useState<Date>(addDays(new Date(), -5));
@@ -23,29 +26,36 @@ export default function TransactionsScreen() {
     const [errors, setErrors] = useState('');
     const [canLoadMore, setCanLoadMore] = useState(false);
     const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+    const [isEditingTransaction, setIsEditingTransaction] = useState({} as Record<string, boolean>);
+    const [isImageGrown, setIsImageGrown] = useState({} as Record<string, boolean>);
+    const [transactionError, setTransactionError] = useState({} as Record<string, string>);
+    const [transactionMsg, setTransactionMsg] = useState({} as Record<string, string>);
+    const [edittedValue, setEdittedValue] = useState({} as Record<string, string>)
+
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
+    if (Platform.OS === 'android') {
+        if (UIManager.setLayoutAnimationEnabledExperimental) {
+            UIManager.setLayoutAnimationEnabledExperimental(true);
+        }
+    }
 
     const navigation = useNavigation();
     const isDarkMode = useColorScheme() == 'dark';
+    const placeHolderColor = isDarkMode ? 'rgba(255, 255, 255, .5)' : 'rgba(0, 0, 0, .5)';
     const style = styleFunc(isDarkMode);
 
     async function submitSearch(isNextPage = false) {
-        setIsLoading(true);
-        Animated.timing(fadeAnim, {
-            toValue: .6,
-            duration: 300,
-            useNativeDriver: true,
-            easing: Easing.inOut(Easing.ease)
-        }).start()
-        setErrors('');
+
+        startAnimation();
+
         try {
 
             const limit = 10;
             const theLink = `${process.env.BACKEND_URL}transaction/search?from=${startDate.toISOString()}&to=${endDate.toISOString()}&type=${type}&perPage=${limit}`
                 + `${isNextPage ? `&pick=${filteredTransactions[filteredTransactions.length - 1].id}` : ''}`
 
-            console.log(theLink)
+
 
             const transactionList: Transaction[] = await fetch(`${theLink}`, {
                 method: 'GET',
@@ -65,20 +75,145 @@ export default function TransactionsScreen() {
             else
                 setFilteredTransactions(filteredTransactions.concat(transactionList));
 
-            setIsLoading(false);
+            finishAnimation();
 
 
         } catch (err: any) {
+            console.log(process.env.BACKEND_URL);
             console.log(err);
-            setIsLoading(false);
+            finishAnimation();
             setErrors(err.message || 'Erro buscando transações');
-        } finally {
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 600,
-                useNativeDriver: true,
-                easing: Easing.inOut(Easing.ease)
-            }).start()
+        }
+
+    }
+
+    function startAnimation() {
+        setIsLoading(true);
+        setErrors('');
+        setTransactionError({} as Record<string, string>);
+        setTransactionMsg({} as Record<string, string>)
+        setIsEditingTransaction({} as Record<string, boolean>);
+        setEdittedValue({} as Record<string, string>);
+        Animated.timing(fadeAnim, {
+            toValue: .6,
+            duration: 300,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease)
+        }).start();
+    }
+
+    function finishAnimation() {
+
+        setIsLoading(false);
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease)
+        }).start();
+
+    }
+
+    async function deleteTransaction(id: string) {
+
+        startAnimation();
+
+        try {
+
+            const theLink = `${process.env.BACKEND_URL}transaction/${id}`
+
+            const { message, status }: { message: string, status: number } = await fetch(`${theLink}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            }).then(res => res.json());
+
+
+
+            if (status == 200) {
+
+                await updateStatement();
+                finishAnimation();
+
+                const newTransactions = filteredTransactions.filter((f) => f.id != id);
+                setFilteredTransactions(newTransactions);
+                Alert.alert(message)
+            } else {
+                setTransactionError({ [id]: message });
+                finishAnimation();
+            }
+
+
+        } catch (err: any) {
+            console.log(process.env.BACKEND_URL);
+            console.log(err);
+            finishAnimation();
+            setTransactionError({ [id]: err.message || 'Erro deletando transação' })
+
+        }
+
+    }
+
+    function startEditing(item: Transaction) {
+        setIsEditingTransaction(() => ({ ...isEditingTransaction, [item.id]: !isEditingTransaction[item.id] }));
+        setEdittedValue(() => ({ ...edittedValue, [item.id]: Math.abs(item.value).toFixed(2) }))
+    }
+
+    async function editTransaction(id: string, value: string) {
+
+        startAnimation();
+
+        if (isNaN(+value) || !+value || +value < 0) {
+            setTransactionError(() => ({ ...transactionError, [id]: 'O valor informado deve ser válido e maior que zero' }))
+            finishAnimation();
+            return;
+        }
+
+        const numValue = +value;
+
+
+
+        try {
+
+            const theLink = `${process.env.BACKEND_URL}transaction/${id}/${numValue}`
+
+            const { message, status }: { message: string, status: number } = await fetch(`${theLink}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            }).then(res => res.json());
+
+
+
+            if (status == 200) {
+
+                await updateStatement();
+                finishAnimation();
+
+                const newTransactions = filteredTransactions.map((t) => {
+                    if (t.id == id) {
+                        t.value = numValue;
+                    }
+                    return t;
+                });
+                setFilteredTransactions(newTransactions);
+                setTransactionMsg(() => ({ ...transactionMsg, [id]: message }));
+            } else {
+                setTransactionError({ [id]: message })
+                finishAnimation();
+            }
+
+
+        } catch (err: any) {
+            console.log(process.env.BACKEND_URL);
+            console.log(err);
+            finishAnimation();
+            setTransactionError({ [id]: err.message || 'Erro alterando transação' })
+
         }
     }
 
@@ -86,6 +221,8 @@ export default function TransactionsScreen() {
         if (!user)
             navigation.dispatch(StackActions.replace('Login'))
     }, [user]);
+
+    LayoutAnimation.linear()
 
 
     return <>
@@ -98,7 +235,7 @@ export default function TransactionsScreen() {
 
             <Header />
 
-            <Animated.View style={[style.filterTransactions, {opacity: fadeAnim}]}>
+            <Animated.View style={[style.filterTransactions, { opacity: fadeAnim }]}>
                 <Text style={style.title}>Filtrar Transações</Text>
 
                 <View style={style.fieldDiv}>
@@ -153,14 +290,44 @@ export default function TransactionsScreen() {
                         <View style={style.operationInfo}>
                             <Text style={style.operationInfoMonth}>{initCapSentence(new Date(item.createdAt).toLocaleDateString(['pt-br', 'en-us'], { month: 'long' }))}</Text>
                             <Text style={style.operationInfoType}>{item.type}</Text>
-                            <Text style={style.operationInfoValue}>{toMoney(item.value)}</Text>
-                            <Text style={style.operationDate}>{new Date(item.createdAt).toLocaleDateString(['pt-br', 'en-us'], { dateStyle: 'short' })}</Text>
+                            {!isEditingTransaction[item.id] ? <Text style={style.operationInfoValue}>{toMoney(item.value)}</Text> :
+                                <TextInput style={style.field} placeholder="Digite o valor da transação" keyboardType="decimal-pad" autoCapitalize="none"
+                                    placeholderTextColor={placeHolderColor} value={edittedValue[item.id]}
+                                    onChange={(v) => {
+                                        v.persist(); !isNaN(Number(v.nativeEvent?.text ?? '')) && !/\.\d{3,}/g.test(v.nativeEvent?.text ?? '') ?
+                                            setEdittedValue(() => ({ ...edittedValue, [item.id]: v.nativeEvent?.text ?? edittedValue[item.id] })) : setEdittedValue(() => ({ ...edittedValue, [item.id]: edittedValue[item.id] }))
+                                    }} />}
+                            <Text style={style.operationDate}>{new Date(item.createdAt).toLocaleString(['pt-br', 'en-us'], { dateStyle: 'short', timeStyle: 'medium' })}</Text>
+
+                            {item.file ? <TouchableOpacity onPress={() => setIsImageGrown(() => {
+
+
+                                return { ...isImageGrown, [item.id]: !isImageGrown[item.id] };
+                            })}>
+                                <Image
+                                    src={item.file}
+                                    style={{ width: isImageGrown[item.id] ? 200 : 100, height: isImageGrown[item.id] ? 200 : 100, objectFit: 'contain', marginTop: 8 }}
+                                />
+                            </TouchableOpacity> : <></>}
+
+                            {transactionError[item.id] ? <Text style={style.operationError}>{transactionError[item.id]}</Text> :
+                                transactionMsg[item.id] ? <Text style={style.operationMessage}>{transactionError[item.id]}</Text> : <></>}
                         </View>
-                        
+
+                        <View>
+                            <TouchableOpacity style={[style.transactionButton, { backgroundColor: '#660000' }]} onPress={() => deleteTransaction(item.id)}>
+                                <Text style={style.submitLabel}>Deletar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[style.transactionButton, { backgroundColor: !isEditingTransaction[item.id] ? '#005c25' : '#001a5c' }]}
+                                onPress={() => !isEditingTransaction[item.id] ? startEditing(item) : editTransaction(item.id, edittedValue[item.id])}>
+                                <Text style={style.submitLabel}>{!isEditingTransaction[item.id] ? 'Editar' : 'Salvar'}</Text>
+                            </TouchableOpacity>
+                        </View>
+
                     </View>)}
 
-                    {canLoadMore ? <TouchableOpacity style={[style.submit, { marginTop: 16 }]} onPress={() => submitSearch(true)} disabled={!user?.name || !token}>
-                        <Text style={style.submitLabel}>Carregar mais</Text>
+                    {canLoadMore ? <TouchableOpacity style={[style.submit, { marginTop: 16, backgroundColor: '#0045ad' }]} onPress={() => submitSearch(true)} disabled={!user?.name || !token}>
+                        <Text style={[style.submitLabel]}>Carregar mais</Text>
                     </TouchableOpacity> : <></>}
 
                 </View> : <></>}
@@ -203,6 +370,11 @@ const styleFunc = (isDarkMode: boolean) => {
         field: { ...styleValuesForMode.fieldStyle, backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 16, borderBottomWidth: 0, flex: 1, color: 'black' },
         submit: { ...styleValuesForMode.submitStyle, marginTop: 24 },
         submitLabel: { ...styleValuesForMode.submitTextStyle, fontSize: 20 },
+        transactionButton: {
+            ...styleValuesForMode.submitStyle,
+            minWidth: 120,
+            marginTop: 10,
+        },
         errorText: {
             fontSize: 12,
             marginVertical: 4,
@@ -210,7 +382,7 @@ const styleFunc = (isDarkMode: boolean) => {
         },
         entry: {
             flexDirection: 'row',
-            marginVertical: 8,
+            marginVertical: 16,
             alignItems: 'center'
         },
         operationInfo: {
@@ -220,9 +392,9 @@ const styleFunc = (isDarkMode: boolean) => {
 
         },
         operationInfoMonth: {
-            color: isDarkMode ? '#57b847' : '#2b6222',
+            color: isDarkMode ? '#8ffc7d' : '#1c4016',
             fontWeight: 'bold',
-            fontSize: 16
+            fontSize: 20
         },
         operationInfoType: {
             color: styleValuesForMode.textColor,
@@ -234,8 +406,18 @@ const styleFunc = (isDarkMode: boolean) => {
             fontSize: 18
         },
         operationDate: {
-            fontSize: 12,
+            fontSize: 14,
             color: styleValuesForMode.textColor
+        },
+        operationError: {
+            fontSize: 14,
+            marginVertical: 4,
+            color: styleValuesForMode.errorText,
+        },
+        operationMessage: {
+            fontSize: 14,
+            marginVertical: 4,
+            color: isDarkMode ? '#8ffc7d' : '#1c4016',
         }
     })
 }

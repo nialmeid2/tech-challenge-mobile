@@ -18,6 +18,9 @@ interface Props {
     isRefreshing: boolean;
     refreshStatement: () => void;
     logout: () => Promise<void>;
+    isBiometricsAvailable: boolean;
+    retryFingerPrint: () => void;
+    setIsBiometricsAvailable: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 export const UserContext = createContext({} as Props);
@@ -26,6 +29,8 @@ interface StatementResponse {
     statement: Transaction[];
     user: User
 }
+
+
 
 export default function UserProvider({ children }: {
     children?: ReactNode
@@ -36,6 +41,7 @@ export default function UserProvider({ children }: {
     const [statement, setStatement] = useState<Transaction[]>([]);
     const [token, setToken] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [isBiometricsAvailable, setIsBiometricsAvailable] = useState(false);
 
 
     async function logout() {
@@ -50,6 +56,10 @@ export default function UserProvider({ children }: {
 
         setToken('');
         setUser(undefined);
+        setIsBiometricsAvailable(false);
+        setStatement([])
+        setIsLoading(false);
+        setIsRefreshing(false)
 
     }
 
@@ -65,7 +75,7 @@ export default function UserProvider({ children }: {
                 'Authorization': `Bearer ${token}`
             }
         }).then(res => res.json())
-            .catch(err => console.log(err));
+          .catch(err => { console.log(process.env.BACKEND_URL); console.log(err) });
 
         setStatement(response.statement)
         setUser(response.user);
@@ -86,10 +96,7 @@ export default function UserProvider({ children }: {
 
     }
 
-
-    useEffect(() => {
-
-
+    function retryFingerPrint() {
         Keychain.getGenericPassword({
             service: AppConstants.APP_STORAGE_KEY,
         }).then((key) => {
@@ -104,14 +111,21 @@ export default function UserProvider({ children }: {
 
         }).catch((err) => {
 
+            if ((err as any)?.message?.includes('msg: Cancel')) { // KeyChain can tell when the error is canceled by user or something else
+                setIsBiometricsAvailable(true);
+            }
+
             console.log(err);
             setIsLoading(false);
 
         });
+    }
 
+    useEffect(() => {
+        retryFingerPrint();
     }, []);
 
-    return <UserContext.Provider value={{ user, isLoading, setUser, setIsLoading, token, setToken, statement, setStatement, updateStatement, isRefreshing, refreshStatement, logout }}>
+    return <UserContext.Provider value={{ user, isLoading, setUser, setIsLoading, token, setToken, statement, setStatement, updateStatement, isRefreshing, refreshStatement, logout, isBiometricsAvailable, retryFingerPrint, setIsBiometricsAvailable }}>
         {children}
     </UserContext.Provider>
 }

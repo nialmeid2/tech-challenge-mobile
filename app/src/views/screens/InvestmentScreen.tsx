@@ -45,6 +45,7 @@ export default function InvestmentScreen() {
             setIsvestmentData(returnedInvestments);
 
         } catch (err: any) {
+            console.log(process.env.BACKEND_URL);
             console.log(err);
             setIsLoading(false);
             setErrors(err.message || 'Erro buscando transações');
@@ -59,17 +60,21 @@ export default function InvestmentScreen() {
     }
 
     async function refreshInvestments() {
+        console.log('startedRefreshing')
         setIsRefreshing(true);
         setErrors('')
 
-        await getInvestments()
-            .then(() => setIsRefreshing(false))
-            .catch(() => setIsRefreshing(false))
+        try {
+            await getInvestments();
+            setIsRefreshing(false);
+        } catch {
+            setIsRefreshing(false);
+        }
 
     }
 
     function getGraphData() {
-       
+
         if (!investmentsData)
             return [];
 
@@ -82,13 +87,13 @@ export default function InvestmentScreen() {
         const retirement = investmentsData.investments["Investimento em Previdência Privada"];
         const stocks = investmentsData.investments["Investimento em Bolsa de Valores"];
         const interest = investmentsData.investments["Rendimentos de Investimentos"]
-        
+
         newGraphData.push({ value: funds, text: `Investimento em \nFundos\n${toMoney(funds)}`, textColor });
-        newGraphData.push({ value: treasury, text: `Investimento em \nTesouro Direto\n${toMoney(treasury)}`, textColor })   
-        newGraphData.push({ value: retirement, text: `Investimento em \nPrevidência Privada\n${toMoney(retirement)}`, textColor })   
-        newGraphData.push({ value: stocks, text: `Investimento em \nBolsa de Valores\n${toMoney(stocks)}`, textColor });         
-        newGraphData.push({ value: interest, text: `Rendimentos de \nInvestimentos\n${toMoney(interest)}`, textColor });         
-         
+        newGraphData.push({ value: treasury, text: `Investimento em \nTesouro Direto\n${toMoney(treasury)}`, textColor })
+        newGraphData.push({ value: retirement, text: `Investimento em \nPrevidência Privada\n${toMoney(retirement)}`, textColor })
+        newGraphData.push({ value: stocks, text: `Investimento em \nBolsa de Valores\n${toMoney(stocks)}`, textColor });
+        newGraphData.push({ value: interest, text: `Rendimentos de \nInvestimentos\n${toMoney(interest)}`, textColor });
+
 
         return newGraphData;
     }
@@ -104,11 +109,13 @@ export default function InvestmentScreen() {
     return <>
         <Loading />
 
-        <ScrollView style={style.body} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => refreshInvestments()} />}>
+        <ScrollView style={style.body} refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={() => refreshInvestments()} />
+        }>
 
             <Header />
 
-            <Animated.View style={[style.investmentsList, { maxHeight: heightAnim }]}>
+            <Animated.View style={[style.investmentsList, { maxHeight: heightAnim, marginBottom: 60 }]}>
                 <Text style={style.title}>Investimentos</Text>
 
                 {errors ? <Text style={style.errorText}>{errors}</Text> : <></>}

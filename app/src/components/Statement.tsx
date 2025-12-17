@@ -2,17 +2,22 @@ import { UserContext } from "@src/context/UserContext";
 import { initCapSentence, toMoney } from "@src/model/utils/str";
 import { styleValues } from "@src/views/styles/StylesCommons";
 import { useContext, useState } from "react";
-import { Dimensions, StyleSheet, Text, useColorScheme, View } from "react-native";
+import { Dimensions, Image, StyleSheet, Text, useColorScheme, View } from "react-native";
 import React from 'react'
 import { PieChart, pieDataItem } from "react-native-gifted-charts";
 import { AdditiveTransactions, TransactionTypes } from "@src/model/enums/Transaction";
 
+interface extendedPieDataItem extends pieDataItem {
+    legend: string
+}
 
 export default function Statement() {
     const { statement, user } = useContext(UserContext);
 
     const isDarkMode = useColorScheme() == 'dark';
     const style = styleFunc(isDarkMode);
+
+    const graphData = statement.length ? getGraphData() : [];
 
     function getGraphData() {
 
@@ -25,11 +30,13 @@ export default function Statement() {
         const interestValue = statement.reduce((acc, item) => item.type == TransactionTypes.INTEREST ? acc + Math.abs(item.value) : acc, 0);
         const textColor = isDarkMode ? 'black' : 'white'
 
-        const newGraphData: pieDataItem[] = [{ value: incomeValue, text: `Rendimentos\n${toMoney(incomeValue)}`, textColor },
-            { value: expensesValue, text: `Gastos\n${toMoney(expensesValue)}`, textColor },
-            { value: investmentsValue, text: `Investimentos\n${toMoney(investmentsValue)}`, textColor },
-            { value: interestValue, text: `Renda de \nInvestimentos\n${toMoney(interestValue)}`, textColor }
-        ];
+        const newGraphData: extendedPieDataItem[] =[]; 
+        
+        incomeValue ? newGraphData.push({ value: incomeValue, text: `Rendimentos\n${toMoney(incomeValue)}`, textColor, color: 'aqua', legend: `Rendimentos (${toMoney(incomeValue)})` }) : '';
+        expensesValue ? newGraphData.push({ value: expensesValue, text: `Gastos\n${toMoney(expensesValue)}`, textColor, color: 'green', legend: `Gastos (${toMoney(expensesValue)})` }) : '';
+        investmentsValue ? newGraphData.push({ value: investmentsValue, text: `Investimentos\n${toMoney(investmentsValue)}`, textColor, color: 'orange', legend: `Investimentos (${toMoney(investmentsValue)})` }) : '';
+        interestValue ? newGraphData.push({ value: interestValue, text: `Renda de \nInvestimentos\n${toMoney(interestValue)}`, textColor, color: 'purple', legend: `Renda de Investimentos (${toMoney(interestValue)})` }) : '';
+        
 
 
 
@@ -63,16 +70,25 @@ export default function Statement() {
                 <Text style={style.operationInfoMonth}>{initCapSentence(new Date(item.createdAt).toLocaleDateString(['pt-br', 'en-us'], { month: 'long' }))}</Text>
                 <Text style={style.operationInfoType}>{item.type}</Text>
                 <Text style={style.operationInfoValue}>{toMoney(item.value)}</Text>
+                {item.file ? <Image source={{uri: item.file}} width={100} height={100} style={{objectFit: 'contain', marginTop: 4}}/> : <></>}
             </View>
             <Text style={style.operationDate}>{new Date(item.createdAt).toLocaleDateString(['pt-br', 'en-us'], { dateStyle: 'short' })}</Text>
         </View>)}
 
 
-        {statement.length ? <View style={{ alignItems: 'center', justifyContent: 'center', marginVertical: 16, width: '100%' }}>
-            <PieChart animationDuration={1500} showTooltip={true} paddingHorizontal={32} paddingVertical={32} isAnimated={true}
-                tooltipBackgroundColor={isDarkMode ? 'white' : 'black'}
-                radius={(Dimensions.get('screen').width - 32) * .4} data={getGraphData()} textColor="white" />
-        </View> : <></>}
+        {statement.length ? <>
+            <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: 16, width: '100%' }}>
+                <PieChart animationDuration={1500} showTooltip={true} paddingHorizontal={32} paddingVertical={32} isAnimated={true}
+                    tooltipBackgroundColor={isDarkMode ? 'white' : 'black'}
+                    radius={(Dimensions.get('screen').width - 32) * .4} data={getGraphData()} textColor="white" />
+            </View>
+            <View style={style.LegendDiv}>
+                {graphData.map((gd) => <View key={gd.legend} style={style.LegendLine}>
+                    <View style={[style.LegendColor, {backgroundColor: gd.color}]} />
+                    <Text style={style.LegendText}>{gd.legend}</Text>
+                </View>)}
+            </View>
+        </> : <></>}
 
 
         <Text style={style.footNote}>Listando últimas 30 transações</Text>
@@ -132,6 +148,27 @@ const styleFunc = (isDarkMode: boolean) => {
             textAlign: 'center',
             marginTop: 8,
             color: styleValuesForMode.textColor
+        },
+
+        LegendDiv: {
+            gap: 12,
+            padding: 16
+        },
+        LegendLine: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12
+        },
+        LegendColor: {
+            width: 48,
+            height: 16,
+            borderWidth: 1,
+            borderColor: styleValuesForMode.textColor
+        },
+        LegendText: {
+            color: styleValuesForMode.textColor,
+            fontSize: 16
         }
+
     })
 }

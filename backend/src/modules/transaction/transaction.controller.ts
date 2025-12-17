@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Inject, ParseDatePipe, ParseIntPipe, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpException, HttpStatus, Inject, Param, ParseDatePipe, ParseFloatPipe, ParseIntPipe, Patch, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { AuthGuard, type AuthorizedRequest } from "src/res/guards/Authenticated.guard";
 import { TransactionService } from "./transaction.service";
 import { CreateTransactionDto } from "./dto/create-transaction.dto";
-import { TransactionTypes } from "./transaction.entity";
+import { type InterceptedFile, TransactionTypes } from "./transaction.entity";
+import { FileInterceptor } from "@nestjs/platform-express";
 
 
 @Controller('/transaction')
@@ -30,10 +31,27 @@ export class TransactionController {
         return this.transactionService.getInvestments(req.user.email)
     }
 
-    @Post('/statement')
-    createTransaction(@Req() req: AuthorizedRequest, @Body() dto: CreateTransactionDto) {
-        return this.transactionService.createATransaction(req.user.email, dto.amount, dto.type);
+    @Post('/statement') 
+    @UseInterceptors(FileInterceptor('img', { limits: { fileSize: 1 * 815 * 1024 } }))   
+    async createTransaction(@Req() req: AuthorizedRequest, @Body() dto: CreateTransactionDto, @UploadedFile() img: InterceptedFile) {
+
+
+        // console.log(`data:${img.mimetype};base64,${Buffer.from(img.buffer).toString('base64')}`)
+        
+
+                
+        return this.transactionService.createATransaction(req.user.email, +dto.amount, dto.type, img);
     }
 
+
+    @Delete('/:id')
+    deleteTransaction(@Req() req: AuthorizedRequest, @Param('id') transactionId: string) {
+        return this.transactionService.deleteATransaction(req.user.email, transactionId);
+    }
+
+    @Patch('/:id/:val')
+    editTransaction(@Req() req: AuthorizedRequest, @Param('id') transactionId: string, @Param('val', ParseFloatPipe) value: number) {
+        return this.transactionService.editATransaction(req.user.email, transactionId, value)
+    }
 
 }

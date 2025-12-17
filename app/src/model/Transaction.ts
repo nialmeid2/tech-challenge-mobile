@@ -7,6 +7,7 @@ export interface Transaction {
     value: number;
     createdAt: Date;
     userId: number;
+    file: string | undefined;
 }
 
 

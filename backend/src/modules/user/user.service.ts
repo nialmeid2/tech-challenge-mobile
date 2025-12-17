@@ -9,22 +9,30 @@ import { addDoc, collection, getDocs, query, where } from "firebase/firestore";
 export class UserService {
     
     async registerUser(newUser: Omit<UserEntity, 'id'>) {
+
+        const userMail = newUser.email
+
         try {
             const credentials = await createUserWithEmailAndPassword(auth, newUser.email, newUser.password!);
 
             
-            await addDoc(collection(db, 'users'), {
+            const newDoc = await addDoc(collection(db, 'users'), {
                 name: newUser.name,
                 email: newUser.email,
                 balance: newUser.balance,
                 createdAt: newUser.createdAt,                
             })
             
+            delete newUser.password;
 
-            return await credentials.user.getIdToken(true);
+            return { 
+                'user': { id: newDoc.id, ...newUser },
+                'token': await credentials.user.getIdToken(true)
+            }
         } catch (err) {
             console.log(err);
-            throw new HttpException(`O e-mail ${newUser.email} já está em uso`, HttpStatus.INTERNAL_SERVER_ERROR);
+            console.log(newUser.email)
+            throw new HttpException(`O e-mail ${userMail} já está em uso`, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

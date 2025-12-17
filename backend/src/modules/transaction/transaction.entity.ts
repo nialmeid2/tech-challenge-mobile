@@ -1,10 +1,20 @@
 
 export class TransactionEntity {
-    id: string;
+    id?: string;
     type: TransactionTypes;
     value: number;
     createdAt: string;
     userId: string;
+    file?: string
+}
+
+export interface InterceptedFile {
+    fieldname: string,
+    originalname: string,
+    encoding: string,
+    mimetype: string,
+    buffer: Buffer,
+    size: number
 }
 
 export enum TransactionTypes {
@@ -27,4 +37,9 @@ export const SubtractiveTransactions = [
 ]
 
 export type InvestmentTypes = TransactionTypes.INVESTIMENT_FUNDS | TransactionTypes.DIRECT_TREASURY |
-            TransactionTypes.PRIVATE_RETIREMENT | TransactionTypes.STOCKS | TransactionTypes.INTEREST
+            TransactionTypes.PRIVATE_RETIREMENT | TransactionTypes.STOCKS | TransactionTypes.INTEREST;
+
+export function toMoney(money: number) {
+    return Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(+money.toFixed(2))
+}
+
